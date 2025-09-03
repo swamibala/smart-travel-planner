@@ -32,3 +32,8 @@ graph TD
 
     CLARIFY_AGENT -->|Sends clarifying question| CHAT
 ```
+
+## setup
+uv venv --python 3.12
+source .venv/bin/activate
+uv sync
