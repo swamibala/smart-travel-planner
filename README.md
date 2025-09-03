@@ -1,62 +1,35 @@
 # Smart Travel Planner
 
-
 ```mermaid 
 graph TD
-    subgraph "Dynamic Travel Itinerary Platform (MVP)"
-        subgraph "Online User Experience"
-            U(User)
-            UC[Chat]
-            U --> UC
-        end
+    CHAT[Chat UI]
+    ORCH_AGENT[Orchestrator Agent]
+    CLARIFY_AGENT[Clarification Agent]
+    RECOMMEND_AGENT[Recommendation Agent]
+    TOOL_NODE[Tool Execution Node]
+    GOOGLE_DINING[Google Dining API through SERP API]
+    GOOGLE_HOTEL[Google Hotel API through SERP API]
+    GOOGLE_ACTIVITIES[Google Websearch through SERP API]
+    ITINERARY_DB[Itinerary Database SQLite]
 
-        subgraph "Offline Agent Experience"
-            A(Agent)
-            AC[Chat]
-            A --> AC
-        end
-
-        subgraph "LangGraph Multi-Agent System"
-            subgraph "Agents"
-                OAG[Itinerary Orchestrator Agent]
-                RA[Recommendation Agent]
-                CA[Clarification Agent]
-            end
-            
-            subgraph "Tools"
-                TE[Tool Execution Node]
-            end
-
-            U --> OAG
-            UC --> OAG
-            A --> OAG
-            AC --> OAG
-            
-            OAG -- "if ambiguous user request" --> CA
-            OAG -- "if planning needs recommendation" --> RA
-            CA -- "Sends clarifying question" --> UC
-            RA -- "Passes tool calls" --> TE
-            TE --> OAG
-            
-            subgraph "Local Database"
-                DB[Local Database SQLite]
-            end
-            
-            OAG -- "Create/Read/Update Itinerary" --> DB
-            DB -- "Read Itinerary Data" --> OAG
-
-            subgraph "Recommendation Tools"
-                GDA[Google Dining API via SERP API]
-                GHA[Google Hotels API via SERP API]
-            end
-            
-            TE --> GDA
-            TE --> GHA
-        end
-
-        subgraph "Itinerary & User Interface"
-            UI[Itinerary UI]
-        end
-        OAG -- "Sends Itinerary Data to UI" --> UI
+    subgraph Multi-Agent System
+        ORCH_AGENT[Orchestrator Agent]
+        CLARIFY_AGENT[Clarification Agent]
+        RECOMMEND_AGENT[Recommendation Agent]
+        TOOL_NODE[Tool Execution Node]
+        ITINERARY_DOMAIN_NODE[Itinerary Domain Node]
     end
+
+    CHAT --> ORCH_AGENT
+    ORCH_AGENT --> CLARIFY_AGENT
+    ORCH_AGENT --> RECOMMEND_AGENT
+    ORCH_AGENT --> ITINERARY_DOMAIN_NODE
+
+    RECOMMEND_AGENT --> TOOL_NODE
+
+    TOOL_NODE --> GOOGLE_DINING
+    TOOL_NODE --> GOOGLE_HOTEL
+    TOOL_NODE --> GOOGLE_ACTIVITIES
+
+    ITINERARY_DOMAIN_NODE --> ITINERARY_DB
 ```
