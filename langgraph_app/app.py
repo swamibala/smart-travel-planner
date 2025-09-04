@@ -1,6 +1,8 @@
 from typing import TypedDict, List, Dict
 from langgraph.graph import StateGraph, END
 from tools.serpapi_tools import tools
+from langgraph.prebuilt import ToolNode
+from langgraph.prebuilt import tools_condition
 from agents import clarification_agent_node, recommendation_agent_node, orchestrator_agent_node
 
 # Define the graph state
@@ -12,24 +14,11 @@ class GraphState(TypedDict):
     recommendation_needed: bool
     agent_response: str
     final_response: str
-    tool_calls: List[Dict]
-    tool_output: str
 
-# Define the Tool Executor node
-def tool_executor_node(state: GraphState):
-    tool_calls = state["tool_calls"]
-    tool_output = []
-    for call in tool_calls:
-        tool_name = call.get("name")
-        tool_args = call.get("args", {})
-        for tool in tools:
-            if hasattr(tool, "name") and tool.name == tool_name:
-                try:
-                    result = tool(**tool_args)
-                except Exception as e:
-                    result = f"Error executing tool '{tool_name}': {e}"
-                tool_output.append(result)
-    return {"tool_output": str(tool_output), "tool_calls": []}
+def response_node(state: GraphState) -> GraphState:
+    # Combine or finalize responses before ending
+    state["final_response"] = state.get("agent_response", "")
+    return state
 
 # Build the LangGraph
 def build_graph():
@@ -39,7 +28,9 @@ def build_graph():
     workflow.add_node("orchestrator", orchestrator_agent_node)
     workflow.add_node("recommendation", recommendation_agent_node)
     workflow.add_node("clarification", clarification_agent_node)
-    workflow.add_node("tool_executor", tool_executor_node)
+    workflow.add_node("tools", ToolNode(tools))
+    workflow.add_node("response", response_node)
+
 
     # Set the entry point
     workflow.set_entry_point("orchestrator")
@@ -51,7 +42,7 @@ def build_graph():
         elif state.get("recommendation_needed"):
             return "recommendation"
         else:
-            return END
+            return "response"
 
     workflow.add_conditional_edges(
         "orchestrator",
@@ -59,10 +50,13 @@ def build_graph():
     )
 
     # Define edges from other agents
-    workflow.add_edge("recommendation", "tool_executor")
-    workflow.add_edge("tool_executor", "orchestrator")
-    workflow.add_edge("clarification", END)
-
+    workflow.add_conditional_edges("recommendation",
+                                   # If the latest message (result) from recommendation is a tool call -> tools_condition routes to tools
+                                   # If the latest message (result) from recommendation is a not a tool call -> tools_condition routes to orchestrator
+                                   tools_condition)
+    workflow.add_edge("tools", "recommendation")
+    workflow.add_edge("clarification", "response")
+    workflow.add_edge("response", END)
     return workflow.compile()
 
 # Build and export the graph
