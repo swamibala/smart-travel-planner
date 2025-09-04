@@ -1,5 +1,5 @@
 from typing import TypedDict, List, Dict
-from langgraph.graph import StateGraph, END, START
+from langgraph.graph import StateGraph, END
 from tools.serpapi_tools import tools
 from agents import clarification_agent_node, recommendation_agent_node, orchestrator_agent_node
 
@@ -11,6 +11,7 @@ class GraphState(TypedDict):
     clarification_needed: bool
     recommendation_needed: bool
     agent_response: str
+    final_response: str
     tool_calls: List[Dict]
     tool_output: str
 
@@ -47,18 +48,14 @@ def build_graph():
     def route_orchestrator(state):
         if state.get("clarification_needed"):
             return "clarification"
-        if state.get("recommendation_needed"):
+        elif state.get("recommendation_needed"):
             return "recommendation"
-        return END
+        else:
+            return END
 
     workflow.add_conditional_edges(
         "orchestrator",
-        route_orchestrator,
-        {
-            "clarification": "clarification",
-            "recommendation": "recommendation",
-            END: END
-        }
+        route_orchestrator
     )
 
     # Define edges from other agents

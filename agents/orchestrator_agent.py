@@ -56,13 +56,12 @@ def orchestrator_agent_node(state):
     # The orchestrator's decision is now explicitly handled.
     if orchestrator_output.next_step == "clarification_needed":
         return {"clarification_needed": True, "agent_response": orchestrator_output.details}
-    
-    if orchestrator_output.next_step == "recommendation_needed":
-        return {"recommendation_needed": True, "agent_response": orchestrator_output.details}
-
-    # Process final response and save to database
-    existing_itinerary["status"] = "final"
-    existing_itinerary["response"] = orchestrator_output.details
-    save_itinerary(thread_id, json.dumps(existing_itinerary))
-    
-    return {"final_response": orchestrator_output.details}
+    elif orchestrator_output.next_step == "recommendation_needed":
+        return {"recommendation_needed": True}
+    else:
+        # Process final response and save to database
+        existing_itinerary["status"] = "final"
+        existing_itinerary["response"] = orchestrator_output.details
+        save_itinerary(thread_id, json.dumps(existing_itinerary))
+        
+        return {"final_response": orchestrator_output.details}
