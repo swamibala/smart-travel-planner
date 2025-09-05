@@ -145,5 +145,12 @@ def search_flight(
 
     except Exception as e:
         return f"Error searching flights: {str(e)}"
-    
-tools = [search_hotels, search_flight]
+
+def get_weather(location: str):
+    """Call to get the current weather."""
+    if location.lower() in ["sf", "san francisco"]:
+        return "It's 60 degrees and foggy."
+    else:
+        return "It's 90 degrees and sunny."
+
+tools = [get_weather]
