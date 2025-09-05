@@ -8,6 +8,11 @@ from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import AnyMessage
 from typing import Annotated
 from langgraph.graph.message import add_messages
+import os
+import dotenv
+
+dotenv.load_dotenv()
+
 
 # Define the graph state
 class GraphState(TypedDict):
@@ -56,7 +61,13 @@ def build_graph():
     workflow.add_edge("tools","recommendation")
     workflow.add_edge("recommendation", END)
     
-    memory = MemorySaver()
+    # Check if the LangGraph API environment variable is set.
+    # If it is, no custom checkpointer should be used.
+    if os.getenv("LANGCHAIN_API_KEY"):
+        memory = None
+    else:
+        # Use the InMemorySaver for local development only.
+        memory = MemorySaver()
     return workflow.compile(checkpointer=memory)
 
 # Build and export the graph
