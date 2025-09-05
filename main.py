@@ -1,7 +1,6 @@
 import uuid
 import json
 from langgraph_app.app import app
-from database.db_setup import create_table, save_itinerary, get_itinerary
 from langchain_core.messages import HumanMessage
 
 
@@ -9,7 +8,6 @@ def main():
     print("Welcome to the Smart Travel Planner!")
     print("Type 'exit' to quit.")
 
-    create_table()
     thread_id = str(uuid.uuid4())
     print(f"Your session ID is: {thread_id}")
 

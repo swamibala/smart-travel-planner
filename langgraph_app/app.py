@@ -13,6 +13,7 @@ from langgraph.graph.message import add_messages
 class GraphState(TypedDict):
     thread_id: str
     messages:Annotated[list[AnyMessage],add_messages]
+    next_node: str
 
 
 # Build the LangGraph
@@ -21,18 +22,40 @@ def build_graph():
 
     # Add the nodes
     workflow.add_node("orchestrator", orchestrator_agent_node)
+    workflow.add_node("clarification", clarification_agent_node)
+    workflow.add_node("recommendation", recommendation_agent_node)
     workflow.add_node("tools", ToolNode(tools))
 
 
     # Set the entry point
     workflow.add_edge(START, "orchestrator")
+
+    # Define the conditional edges from the orchestrator
+    def route_orchestrator(state):
+        if state.get("clarification_needed"):
+            return "clarification"
+        elif state.get("recommendation_needed"):
+            return "recommendation"
+        else:
+            return END
+
     workflow.add_conditional_edges(
         "orchestrator",
+        route_orchestrator
+    )
+
+    workflow.add_edge("orchestrator", "clarification")
+    workflow.add_edge("clarification", END)
+
+    workflow.add_edge("orchestrator", "recommendation")
+    workflow.add_conditional_edges(
+        "recommendation",
         tools_condition,
         {"__end__": END, "tools": "tools"}
     )
-    workflow.add_edge("tools","orchestrator")
-
+    workflow.add_edge("tools","recommendation")
+    workflow.add_edge("recommendation", END)
+    
     memory = MemorySaver()
     return workflow.compile(checkpointer=memory)
 

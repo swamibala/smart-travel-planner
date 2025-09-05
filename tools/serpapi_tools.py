@@ -2,11 +2,9 @@ import os
 from typing import Optional
 from dotenv import load_dotenv
 import serpapi
-from langchain_core.tools import tool
 
 load_dotenv()
 
-@tool
 def search_hotels(
     query: Optional[str] = None,
     check_in_date: Optional[str] = None,
@@ -53,7 +51,6 @@ def search_hotels(
 
     return str(top_3_hotels)
 
-@tool
 def format_duration(minutes: int) -> str:
     """Convert duration in minutes into 'Xh Ym' format."""
     try:
@@ -146,11 +143,4 @@ def search_flight(
     except Exception as e:
         return f"Error searching flights: {str(e)}"
 
-def get_weather(location: str):
-    """Call to get the current weather."""
-    if location.lower() in ["sf", "san francisco"]:
-        return "It's 60 degrees and foggy."
-    else:
-        return "It's 90 degrees and sunny."
-
-tools = [get_weather]
+tools = [search_flight, search_hotels]
