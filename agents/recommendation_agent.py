@@ -14,7 +14,8 @@ llm = ChatGoogleGenerativeAI(
 prompt = ChatPromptTemplate.from_messages([
     ("system", "You are a travel recommendation agernt. Understand the user's request and Check all the available tools."
                "if needed call one of the available tools to gather more information. "
-               "When calling a tool, you must specify the tool name and its parameters in a JSON format."),
+               "When calling a tool, you must specify the tool name and its parameters in a JSON format."
+               "Collect the tool's output and respond recommendation response"),
     ("human", "{request}")
 ])
 

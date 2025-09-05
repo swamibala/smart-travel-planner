@@ -14,6 +14,9 @@ class OrchestratorResponse(BaseModel):
     next_step: str = Field(
         description="The next step to take. Must be one of 'clarification_needed', 'recommendation_needed', or 'final_response'."
     )
+    final_response: str = Field(
+        description="The final response to the user. Only used if next_step is 'final_response'."
+    )
 
 
 llm = ChatGoogleGenerativeAI(
@@ -22,12 +25,24 @@ llm = ChatGoogleGenerativeAI(
     temperature=0
 )
 
+system_prompt = """
+    You are the central orchestrator for a travel planner. Your sole purpose is to analyze the user's request and decide the next step in the workflow.
+
+    **Your decision must be one of the following:**
+    1.  **"clarification"**: Use this ONLY when the user's request is missing essential information, such as the **origin city**, **destination city**, or **dates of travel**.
+    2.  **"recommendation"**: Use this when the user's request is complete and contains all necessary details (origin, destination, dates) to begin the travel planning process.
+    3.  **"final_response"**: Use this when a complete, finalized response can be provided to the user without further steps. This is typically after all necessary information has been gathered and a recommendation has been formulated. The response should be a well-structured travel itinerary.
+
+    **You must respond with a JSON object following this schema:**
+    ```json
+    {{
+    "next_step": "string, one of 'clarification', 'recommendation', or 'final_response'",
+    "final_response": "string, the final itinerary or response. ONLY include this if next_step is 'final_response'."
+    }}
+    ```
+    """
 prompt = ChatPromptTemplate.from_messages([
-    ("system", "You are the central orchestrator for a travel planner. Your job is to analyze the user's request and decide on the next step. "
-               "First, determine if the request is a new trip plan or needs more detail like dates, duration, or location. If so, a clarification is needed. "
-               "If the request is specific and actionable (e.g., 'find a hotel in Paris' or 'add a dining option'), then a recommendation is needed. "
-               "Otherwise, if the user is happy with the plan or the request is non-actionable, provide a final response."
-               "You should only respond with a JSON object following the OrchestratorResponse schema."),
+    ("system", system_prompt),
     ("human", "{request}")
 ])
 
@@ -60,12 +75,12 @@ def orchestrator_agent_node(state):
     next_step = parsed.get("next_step") or parsed.get("nextStep")
 
     # map LLM decision into state flags used by the graph routing
-    if next_step in ("clarification", "clarification_needed"):
-        return {**state, "clarification_needed": True, "recommendation_needed": False}
-    elif next_step in ("recommendation", "recommendation_needed"):
-        return {**state, "recommendation_needed": True, "clarification_needed": False}
-    elif next_step in ("final", "final_response"):
-        return {**state, "final_response": parsed.get("final_response") or parsed.get("finalResponse"), "clarification_needed": False, "recommendation_needed": False}
+    if str.lower(next_step) == "clarification":
+        return {**state, "clarification_needed": True, "recommendation_needed": False, "final_response_needed": False}
+    elif str.lower(next_step) == "recommendation":
+        return {**state, "recommendation_needed": True, "clarification_needed": False, "final_response_needed": False}
+    elif str.lower(next_step) == "final_response":
+        return {**state, "final_response": parsed.get("final_response") or parsed.get("finalResponse"), "clarification_needed": False, "recommendation_needed": False, "final_response_needed": True}
     else:
         # keep raw for debugging if parsing fails
         return {**state, "orchestrator_parse_failed_raw": raw, "parsed_orchestrator": parsed}

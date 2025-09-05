@@ -19,6 +19,9 @@ class GraphState(TypedDict):
     thread_id: str
     messages:Annotated[list[AnyMessage],add_messages]
     next_node: str
+    clarification_needed: bool
+    recommendation_needed: bool
+    final_response_needed: bool
 
 
 # Build the LangGraph
@@ -49,17 +52,25 @@ def build_graph():
         route_orchestrator
     )
 
-    workflow.add_edge("orchestrator", "clarification")
-    workflow.add_edge("clarification", END)
+    workflow.add_edge("clarification", "orchestrator")
 
-    workflow.add_edge("orchestrator", "recommendation")
+    # Conditional edges for the recommendation agent
+    def route_recommendation(state):
+        messages = state.get("messages")
+        if messages and messages[-1].tool_calls:
+            return "tools"
+        else:
+            # Route back to orchestrator to re-evaluate the next step
+            return "orchestrator"
+
     workflow.add_conditional_edges(
         "recommendation",
-        tools_condition,
-        {"__end__": END, "tools": "tools"}
+        route_recommendation,
+        # This mapping is used for the conditional edges
+        {"tools": "tools", "orchestrator": "orchestrator"}
     )
+    
     workflow.add_edge("tools","recommendation")
-    workflow.add_edge("recommendation", END)
     
     # Check if the LangGraph API environment variable is set.
     # If it is, no custom checkpointer should be used.

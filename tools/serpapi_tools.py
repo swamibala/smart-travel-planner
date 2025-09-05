@@ -72,8 +72,8 @@ def search_flight(
     A tool that uses SerpAPI to search for flights and return the top 3 options.
     
     Args:
-        originLocationCode (str): The origin location code for the flight.
-        destinationLocationCode (str): The destination location code for the flight.
+        originLocationCode (str): The origin location AIRPORT code for the flight.
+        destinationLocationCode (str): The destination location AIRPORT code for the flight.
         departureDate (str): The departure date for the flight in 'YYYY-MM-DD' format.
         returnDate (Optional[str], optional): The return date for the flight in 'YYYY-MM-DD' format. Defaults to None.
         adults (int, optional): The number of adults in the flight. Defaults to 1.

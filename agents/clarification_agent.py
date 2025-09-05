@@ -1,7 +1,6 @@
 import os
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
-from tools.serpapi_tools import tools
 
 
 llm = ChatGoogleGenerativeAI(
@@ -10,14 +9,11 @@ llm = ChatGoogleGenerativeAI(
     temperature=0)
 
 prompt = ChatPromptTemplate.from_messages([
-    ("system", "You are a clarification agent whose job is to ask the user for more details about their travel request. "
-        "You will first classify the request to determine what kind of clarification is needed, and then ask a clarifying question. "
-        "Understand the existing available tools which will be called by the recommendation agent after you ask your question. "
-        "Understand the tools and their "),
+    ("system", "You are a clarification agent whose job is to ask the user ONLY missing details about their travel request. Example: source, destination, dates. "),
     ("human", "{request}")
 ])
 
-llm_chain = prompt | llm.bind_tools(tools)
+llm_chain = prompt | llm
 
 def clarification_agent_node(state):
     request = state["messages"][-1].content
