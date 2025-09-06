@@ -45,6 +45,7 @@ uv sync
 
 - Create a .env file with the below keys
 ```
-SERP_API_KEY=
+SERPAPI_API_KEY=
 GOOGLE_API_KEY=
+LANGCHAIN_API_KEY=
 ```
