@@ -2,11 +2,9 @@ import os
 from typing import Optional
 from dotenv import load_dotenv
 import serpapi
-from langchain_core.tools import tool
 
 load_dotenv()
 
-@tool
 def search_hotels(
     query: Optional[str] = None,
     check_in_date: Optional[str] = None,
@@ -53,7 +51,6 @@ def search_hotels(
 
     return str(top_3_hotels)
 
-@tool
 def format_duration(minutes: int) -> str:
     """Convert duration in minutes into 'Xh Ym' format."""
     try:
@@ -75,8 +72,8 @@ def search_flight(
     A tool that uses SerpAPI to search for flights and return the top 3 options.
     
     Args:
-        originLocationCode (str): The origin location code for the flight.
-        destinationLocationCode (str): The destination location code for the flight.
+        originLocationCode (str): The origin location AIRPORT code for the flight.
+        destinationLocationCode (str): The destination location AIRPORT code for the flight.
         departureDate (str): The departure date for the flight in 'YYYY-MM-DD' format.
         returnDate (Optional[str], optional): The return date for the flight in 'YYYY-MM-DD' format. Defaults to None.
         adults (int, optional): The number of adults in the flight. Defaults to 1.
@@ -145,5 +142,5 @@ def search_flight(
 
     except Exception as e:
         return f"Error searching flights: {str(e)}"
-    
-tools = [search_hotels, search_flight]
+
+tools = [search_flight, search_hotels]

@@ -9,5 +9,6 @@ dependencies = [
     "langchain>=0.3.27",
     "langchain-google-genai>=2.1.10",
     "langgraph>=0.6.6",
+    "langgraph-cli[inmem]>=0.4.1",
     "serpapi>=0.1.5",
 ]
