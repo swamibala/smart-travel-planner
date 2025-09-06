@@ -12,10 +12,7 @@ class OrchestratorResponse(BaseModel):
     Decides the next action for the travel planning workflow.
     """
     next_step: str = Field(
-        description="The next step to take. Must be one of 'clarification_needed', 'recommendation_needed', or 'final_response'."
-    )
-    final_response: str = Field(
-        description="The final response to the user. Only used if next_step is 'final_response'."
+        description="The next step to take. Must be one of 'clarification_needed', 'recommendation_needed', or 'formatter'."
     )
 
 
@@ -31,22 +28,25 @@ system_prompt = """
     **Your decision must be one of the following:**
     1.  **"clarification"**: Use this ONLY when the user's request is missing essential information, such as the **origin city**, **destination city**, or **dates of travel**.
     2.  **"recommendation"**: Use this when the user's request is complete and contains all necessary details (origin, destination, dates) to begin the travel planning process.
-    3.  **"final_response"**: Use this when a complete, finalized response can be provided to the user without further steps. This is typically after all necessary information has been gathered and a recommendation has been formulated. The response should be a well-structured travel itinerary.
+    3.  **"formatter"**: Use this when all information has been gathered and is ready to be presented to the user. The recommendation agent will have already collected all the necessary data.
 
     **You must respond with a JSON object following this schema:**
     ```json
     {{
-    "next_step": "string, one of 'clarification', 'recommendation', or 'final_response'",
-    "final_response": "string, the final itinerary or response. ONLY include this if next_step is 'final_response'."
+      "next_step": "string, one of 'clarification', 'recommendation', or 'formatter'"
     }}
     ```
+    **Example Scenarios:**
+    * **User**: "I need a flight to Paris." -> **Next Step**: clarification
+    * **User**: "Find me a flight from New York to London for next week." -> **Next Step**: recommendation
+
     """
 prompt = ChatPromptTemplate.from_messages([
     ("system", system_prompt),
     ("human", "{request}")
 ])
 
-llm_chain = prompt | llm
+llm_chain = prompt | llm.with_structured_output(OrchestratorResponse, include_raw=True)
 
 def orchestrator_agent_node(state):
     """
@@ -57,31 +57,16 @@ def orchestrator_agent_node(state):
     response = llm_chain.invoke({"request": request})
     print(f"Orchestrator response: {response}")
 
-    # get raw text safely
-    raw = getattr(response, "content", "") or ""
-    # strip markdown code fences (```json ... ```)
-    raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.IGNORECASE).strip()
-
-    # try to parse JSON, fallback to extracting {...} block
-    try:
-        parsed = json.loads(raw) if raw else {}
-    except json.JSONDecodeError:
-        m = re.search(r"\{.*\}", raw, flags=re.DOTALL)
-        try:
-            parsed = json.loads(m.group(0)) if m else {}
-        except Exception:
-            parsed = {}
-
-    next_step = parsed.get("next_step") or parsed.get("nextStep")
+    next_step = response.get("parsed").next_step
 
     # map LLM decision into state flags used by the graph routing
     if str.lower(next_step) == "clarification":
         return {**state, "clarification_needed": True, "recommendation_needed": False, "final_response_needed": False}
     elif str.lower(next_step) == "recommendation":
         return {**state, "recommendation_needed": True, "clarification_needed": False, "final_response_needed": False}
-    elif str.lower(next_step) == "final_response":
-        return {**state, "final_response": parsed.get("final_response") or parsed.get("finalResponse"), "clarification_needed": False, "recommendation_needed": False, "final_response_needed": True}
+    elif str.lower(next_step) == "formatter":
+        return {**state, "final_response_needed": True, "clarification_needed": False, "recommendation_needed": False}
     else:
-        # keep raw for debugging if parsing fails
-        return {**state, "orchestrator_parse_failed_raw": raw, "parsed_orchestrator": parsed}
+        # Fallback for unexpected output
+        return state
     

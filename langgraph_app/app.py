@@ -3,7 +3,7 @@ from langgraph.graph import StateGraph, END, START
 from tools.serpapi_tools import tools
 from langgraph.prebuilt import ToolNode
 from langgraph.prebuilt import tools_condition
-from agents import clarification_agent_node, recommendation_agent_node, orchestrator_agent_node
+from agents import clarification_agent_node, recommendation_agent_node, orchestrator_agent_node, formatter_agent_node
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import AnyMessage
 from typing import Annotated
@@ -32,6 +32,8 @@ def build_graph():
     workflow.add_node("orchestrator", orchestrator_agent_node)
     workflow.add_node("clarification", clarification_agent_node)
     workflow.add_node("recommendation", recommendation_agent_node)
+    workflow.add_node("formatter", formatter_agent_node)
+
     workflow.add_node("tools", ToolNode(tools))
 
 
@@ -44,6 +46,8 @@ def build_graph():
             return "clarification"
         elif state.get("recommendation_needed"):
             return "recommendation"
+        elif state.get("final_response_needed"):
+            return "formatter"        
         else:
             return END
 
@@ -71,6 +75,8 @@ def build_graph():
     )
     
     workflow.add_edge("tools","recommendation")
+    workflow.add_edge("formatter", END)
+
     
     # Check if the LangGraph API environment variable is set.
     # If it is, no custom checkpointer should be used.
