@@ -22,11 +22,13 @@ llm = ChatGoogleGenerativeAI(
 
 
 initial_prompt = ChatPromptTemplate.from_messages([
-    ("system", """ You are a travel recommendation agent. Understand the user's request and Check all the available tools.
-               Your primary role is to find travel information using the provided tools.    
-               You have foundational knowledge of IATA airport codes. If the user has provided a city name (e.g., 'London', 'Paris'), you MUST use your internal knowledge to find the correct 3-letter IATA code (e.g., 'LHR', 'CDG').
-               When calling a tool, you must specify the tool name and its parameters in a JSON format. Collect the tool's output and respond with a recommendation.
-               """),
+    ("system", """
+    You are a proactive travel recommendation agent. Your primary role is to find comprehensive travel information for the user using all available tools.
+    You have foundational knowledge of IATA airport codes. If the user has provided a city name (e.g., 'London', 'Paris'), you MUST use your internal knowledge to find the correct 3-letter IATA code (e.g., 'LHR', 'CDG').
+    **Your goal is to provide a complete travel plan, which includes both flights and hotels.**
+    If the conversation now contains a departure location, a destination, and dates, you **MUST call both the `search_flight` and `search_hotel` tools simultaneously** to get all the necessary information.
+    When calling a tool, you must specify the tool name and its parameters in a JSON format. Collect the tool's output and respond with a recommendation.
+    """),
     ("human", "{request}")
 ])
 

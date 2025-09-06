@@ -56,7 +56,7 @@ def build_graph():
         route_orchestrator
     )
 
-    workflow.add_edge("clarification", "orchestrator")
+    workflow.add_edge("clarification", END)
 
     # Conditional edges for the recommendation agent
     def route_recommendation(state):
