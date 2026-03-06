@@ -24,20 +24,30 @@ def search_hotels(
     Returns:
         The search results.
     """
-    if query is None:
-        raise ValueError("Query cannot be None")
+    import datetime
+
+    if not check_in_date or not check_in_date.strip():
+        # Google Hotels strictly requires a check_in_date. Default to tomorrow.
+        check_in_date = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+        
+    if not check_out_date or not check_out_date.strip():
+        # Default to 1 day after check in
+        check_in_obj = datetime.datetime.strptime(check_in_date, "%Y-%m-%d")
+        check_out_date = (check_in_obj + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+
+    params = {
+        "engine": "google_hotels",
+        "hl": "en",
+        "gl": "us",
+        "q": query,
+        "check_in_date": check_in_date.strip(),
+        "check_out_date": check_out_date.strip(),
+        "currency": currency,
+        "sort_by": "8",
+    }
 
     client = serpapi.Client(api_key=os.getenv("SERPAPI_API_KEY"))
-    results = client.search(
-        engine="google_hotels",
-        hl="en",
-        gl="us",
-        q=query,
-        check_in_date=check_in_date,
-        check_out_date=check_out_date,
-        currency=currency,
-        sort_by="8",
-    )
+    results = client.search(**params)
 
     # Get the local results
     local_results = results.get("properties", [])
