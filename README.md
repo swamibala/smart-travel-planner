@@ -102,3 +102,11 @@ Run the interactive CLI agent:
 ```bash
 uv run python main.py
 ```
+
+### 4. Exploring LangSmith Traces
+This project now strictly enforces telemetry across all agent nodes via LangSmith's `@traceable` decorators.
+
+By providing the `LANGCHAIN_API_KEY` in the `.env` file, execution payloads will automatically flow into your LangSmith dashboard under the "SmartTravelPlanner" project. 
+
+- Tracing helps debug LLM errors, measure node execution latency, and verify structured Pydantic input schemas in UI.
+- Ensure your `LANGCHAIN_TRACING_V2=true` value is active to retain logs!
