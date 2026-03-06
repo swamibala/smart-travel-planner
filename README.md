@@ -38,8 +38,8 @@ graph TD
 ```
 
 ### Agent Roles
-1. **Orchestrator Planner**: Uses `gemini-2.0-flash` to analyze the query. If the user asks about hotels, it routes to strictly structured entity extraction. If it's general knowledge, it routes to standard web search.
-2. **Entity Extraction Node**: Parses location strings, radius, and check-in dates into a strictly typed dictionary (`Agents.state.Entities`) via Langchain's `with_structured_output`.
+1. **Orchestrator Planner**: Uses `gemini-2.5-flash` to analyze the query. If the user asks about hotels, it routes to strictly structured entity extraction. If it's general knowledge, it routes to standard web search.
+2. **Entity Extraction Node**: Parses location strings, radius, and check-in dates into a strictly typed dictionary (`agents.state.Entities`) via Langchain's `with_structured_output`.
 3. **Hotel Recommendation Node**: Passes strictly extracted JSON parameters to the SERP Google Hotels API.
 4. **Web Search Node**: Given a broader request, searches the internet via Tavily.
 5. **Summarisation Node**: Ingests raw outputs from the Hotel API or Tavily Web Search, converting JSON or text shards into a helpful dialogue.
@@ -52,10 +52,10 @@ graph TD
 ```
 ├── agents/
 │   ├── graph.py       # The compiled LangGraph definitions
-│   ├── nodes.py       # Core node functions utilizing LLMs
+│   ├── nodes.py       # Core node functions utilizing LLMs and Pydantic schemas
 │   └── state.py       # TypedDict schemas for internal routing payloads
 ├── tools/
-│   ├── serpapi_tools.py # Wrapper for Google Hotels / Flights Search 
+│   ├── serpapi_tools.py # Wrapper for Google Hotels Search 
 │   └── tavily_tools.py  # Wrapper for Tavily's Web Search
 ├── main.py            # CLI interactive Chat interface
 ├── pyproject.toml     # `uv` managed dependency file
