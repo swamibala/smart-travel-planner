@@ -110,3 +110,14 @@ By providing the `LANGCHAIN_API_KEY` in the `.env` file, execution payloads will
 
 - Tracing helps debug LLM errors, measure node execution latency, and verify structured Pydantic input schemas in UI.
 - Ensure your `LANGCHAIN_TRACING_V2=true` value is active to retain logs!
+
+
+https://martinfowler.com/bliki/MonolithFirst.html
+[Modular Monolith: Is This the Trend in Software Architecture?
+](https://arxiv.org/pdf/2401.11867)
+https://dzone.com/articles/modular-monolith-architecture-overview
+https://dev.to/flashblack/developing-modular-monolith-vs-traditional-monolith-in-software-engineering-pros-and-cons-p61
+https://www.dotnetrocks.com/details/1916
+[Spring Modulith
+](https://spring.io/projects/spring-modulith)
+https://www.archunit.org/
