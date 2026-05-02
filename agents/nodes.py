@@ -203,7 +203,8 @@ def orchestrator_node(state: AgentState) -> AgentState:
 
     if response.route == "direct":
         state["summary"]   = response.direct_response or "Hi! I'm your Smart Travel Planner. Ask me about hotels or destinations!"
-        state["next_node"] = "critique"
+        state["is_valid"]  = True
+        state["next_node"] = "memory_write"   # skip search, summarize, and critique
     else:
         state["next_node"] = response.route
 

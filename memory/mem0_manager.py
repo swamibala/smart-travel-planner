@@ -48,13 +48,15 @@ def _build_mem0_config() -> dict:
             "config": {
                 "model": "models/gemini-embedding-001",
                 "api_key": os.environ.get("GOOGLE_API_KEY"),
+                "embedding_dims": 768,
             },
         },
         "vector_store": {
             "provider": "qdrant",
             "config": {
                 "collection_name": "smart_travel_planner",
-                "path": "./memory_store",      # persists to disk
+                "path": "./memory_store",
+                "embedding_model_dims": 768,
             },
         },
     }

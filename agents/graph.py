@@ -31,7 +31,7 @@ from agents.nodes import (
 
 
 def route_from_orchestrator(state: AgentState):
-    """Routes to entity_extraction, web_search, or critique (direct/chitchat)."""
+    """Routes to entity_extraction, web_search, or memory_write (direct/chitchat)."""
     return state.get("next_node", "web_search")
 
 
@@ -61,7 +61,7 @@ def build_graph():
         {
             "entity_extraction": "entity_extraction",
             "web_search":        "web_search",
-            "critique":          "critique",   # direct path when orchestrator handles it inline
+            "memory_write":      "memory_write",   # direct path — skips search, summarize, critique
         },
     )
 
