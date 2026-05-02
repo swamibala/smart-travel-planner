@@ -16,13 +16,12 @@
 | `main.py` | CLI entry point |
 
 ## Mem0 / Qdrant gotchas
-- Embedder provider must be `"gemini"` — **not** `"google"` (raises `ValidationError`)
 - LLM provider is `"litellm"` with model `"gemini/gemini-2.5-flash"` — `litellm` must be installed
 - Qdrant runs **embedded** at `./memory_store/` — no Docker or external server needed
 - SQLite signal scores live at `./memory_store/signal_scores.db` — never hard-delete rows, use archive flag
 
 ## Conventions
-- No `@traceable` decorators — LangSmith is removed; observability is in the Streamlit trace panel
+- observability is in the Streamlit trace panel
 - All memory reads/writes go through the `travel_memory` singleton in `mem0_manager.py`
 - Feedback signals: `explicit_negative/positive` = 100% · `implicit_negative` = 10% · `autonomous_failure` = 100%
 - `user_id` scopes all memories — always pass it through `AgentState`
