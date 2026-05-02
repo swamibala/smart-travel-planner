@@ -1,3 +1,21 @@
+"""
+agents/nodes.py
+───────────────
+All agent nodes for the Smart Travel Planner.
+
+Memory additions:
+  memory_read_node   → reads Mem0 BEFORE orchestrator runs
+  memory_write_node  → writes insights to Mem0 AFTER critique runs
+  orchestrator_node  → injects user_memory into system prompt
+  summarize_node     → injects user preferences into summary prompt
+  critique_node      → autonomous failure signal → 100% confidence feedback
+
+Signal flow:
+  Conversational: user feedback in main.py → process_feedback()
+  Autonomous:     critique is_valid=False  → process_feedback("autonomous_failure")
+"""
+
+import os
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langsmith import traceable
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -10,24 +28,145 @@ load_dotenv()
 from agents.state import AgentState, Entities
 from tools.tavily_tools import web_search
 from tools.serpapi_tools import search_hotels
+from memory.mem0_manager import travel_memory
 
-# Using gemini-2.5-flash as the latest standard flash model
 LLM_MODEL = "gemini-2.5-flash"
 
 
-import os
-
 def get_llm():
     return ChatGoogleGenerativeAI(
-        model=LLM_MODEL, 
-        temperature=0, 
-        api_key=os.environ.get("GOOGLE_API_KEY")
+        model=LLM_MODEL,
+        temperature=0,
+        api_key=os.environ.get("GOOGLE_API_KEY"),
     )
 
 
+# ── MEMORY READ NODE ──────────────────────────────────────────────────────────
+
+@traceable
+def memory_read_node(state: AgentState) -> AgentState:
+    """
+    Reads relevant memories from Mem0 BEFORE any agent runs.
+    Injects retrieved memories into state so all downstream nodes can use them.
+
+    Also checks the archive for resurrection opportunities —
+    if a pattern was forgotten but is reappearing, fast-track it back.
+
+    Signal type: READ (no write, no feedback processing)
+    """
+    user_id   = state.get("user_id", "default_user")
+    user_query = state["messages"][-1].content
+
+    print(f"\n[Mem0] Reading memories for user: {user_id}")
+
+    # Check archive first — maybe this topic was forgotten but is back
+    resurrected = travel_memory.check_resurrection(user_id, user_query)
+    if resurrected:
+        print(f"[Mem0] Resurrected preference: '{resurrected}'")
+
+    # Retrieve active memories relevant to this query
+    memory_context = travel_memory.read(
+        user_id=user_id,
+        query=user_query,
+        agent_id="orchestrator",
+    )
+
+    if memory_context:
+        print(f"[Mem0] Retrieved memory context:\n{memory_context}\n")
+    else:
+        print("[Mem0] No relevant memories found — fresh start\n")
+
+    state["user_memory"]    = memory_context
+    state["memory_updated"] = False
+    return state
+
+
+# ── MEMORY WRITE NODE ─────────────────────────────────────────────────────────
+
+@traceable
+def memory_write_node(state: AgentState) -> AgentState:
+    """
+    Extracts lasting insights from this session and writes them to Mem0.
+    Called AFTER critique_node — end of every graph execution.
+
+    What gets written:
+      - User preferences extracted from the conversation
+      - Critique quality signal (autonomous feedback loop)
+
+    What does NOT get written:
+      - Raw search results (task-specific noise)
+      - Hotel prices (temporary data)
+      - Specific dates (session-scoped)
+
+    Signal type: WRITE + autonomous feedback if critique failed
+    """
+    user_id  = state.get("user_id", "default_user")
+    messages = state["messages"]
+    summary  = state.get("summary", "")
+    is_valid = state.get("is_valid", True)
+
+    # ── Extract user preference signals from the conversation ─────────────────
+    # Mem0's LLM extractor will separate lasting facts from task noise
+    conversation_content = "\n".join([
+        f"{m.type}: {m.content}" for m in messages
+    ])
+
+    if conversation_content:
+        print(f"[Mem0] Writing user preferences from conversation...")
+        memory_ids = travel_memory.write(
+            user_id=user_id,
+            content=conversation_content,
+            agent_id="orchestrator",
+            topic="travel_preferences",
+        )
+        print(f"[Mem0] Stored {len(memory_ids)} memory entries")
+
+    # ── Autonomous feedback signal from critique node ─────────────────────────
+    # This is the KEY autonomous signal — no human involved
+    # critique_node set is_valid=False → the system knows the summary failed
+    # Confidence: 100% (programmatic signal, not ambiguous language)
+    if not is_valid:
+        critique_text = state.get("critique", "Summary quality check failed")
+        print(f"\n[Mem0] 🤖 Autonomous signal detected: critique failed")
+        print(f"[Mem0] Signal confidence: 100% (programmatic — no ambiguity)")
+        print(f"[Mem0] Critique: {critique_text}")
+
+        travel_memory.process_feedback(
+            user_id=user_id,
+            signal_type="autonomous_failure",
+            topic=f"search_quality: {state['messages'][-1].content[:50]}",
+        )
+
+        # Also write the failure pattern as a memory so future searches learn
+        failure_insight = (
+            f"Previous search failed quality check. "
+            f"Critique feedback: {critique_text}. "
+            f"Query was: {state['messages'][-1].content}"
+        )
+        travel_memory.write(
+            user_id=user_id,
+            content=failure_insight,
+            agent_id="critique_agent",
+            topic="search_quality_failure",
+        )
+
+    # ── Apply time-based decay to all memories ────────────────────────────────
+    # Stale preferences fade naturally — 1% per session
+    travel_memory.apply_decay(user_id=user_id, decay_rate=0.01)
+    print(f"[Mem0] Applied session decay (rate: 1%)")
+
+    state["memory_updated"] = True
+    return state
+
+
+# ── ORCHESTRATOR NODE (updated) ───────────────────────────────────────────────
+
 class RouteDecision(BaseModel):
     route: Literal["entity_extraction", "web_search"] = Field(
-        description="Route to 'entity_extraction' if the user is asking about hotels, accommodation, or places to stay. Route to 'web_search' for general questions."
+        description=(
+            "Route to 'entity_extraction' if the user is asking about hotels, "
+            "accommodation, or places to stay. Route to 'web_search' for general questions."
+        )
     )
 
 
@@ -35,60 +174,67 @@ class RouteDecision(BaseModel):
 def orchestrator_node(state: AgentState) -> AgentState:
     """
     Decides whether the user is asking for hotels or general info.
-    Routes to `entity_extraction` or `web_search`.
+    
+    Memory injection: user_memory is prepended to the system prompt
+    so the orchestrator is aware of past preferences when routing.
+    E.g. "user always books budget hotels" affects routing confidence.
     """
     llm = get_llm().with_structured_output(RouteDecision)
-    messages = state["messages"]
-    user_query = messages[-1].content
 
-    system_prompt = "You are the Orchestrator Planner Agent. Your goal is to route the user's query accurately."
-    
+    user_query   = state["messages"][-1].content
+    user_memory  = state.get("user_memory", "")
+
+    # ── Inject memory into system prompt ──────────────────────────────────────
+    base_prompt = (
+        "You are the Orchestrator Planner Agent. "
+        "Your goal is to route the user's query accurately."
+    )
+    if user_memory:
+        system_prompt = f"{base_prompt}\n\n{user_memory}"
+    else:
+        system_prompt = base_prompt
+
     response: RouteDecision = llm.invoke(
         [SystemMessage(content=system_prompt), HumanMessage(content=user_query)]
     )
 
     state["next_node"] = response.route
-
     return state
 
 
+# ── ENTITY EXTRACTION NODE (unchanged) ───────────────────────────────────────
+
 @traceable
 def entity_extraction_node(state: AgentState) -> AgentState:
-    """
-    Extracts entities for the hotel search.
-    """
-    llm = get_llm()
-    # Structured output capabilities
-    llm_with_tools = llm.with_structured_output(Entities)
+    """Extracts entities for the hotel search."""
+    llm = get_llm().with_structured_output(Entities)
 
-    user_query = state["messages"][-1].content
-    system_prompt = "You are an Entity Extraction Agent. Extract relevant details for a hotel search from the user query."
+    user_query    = state["messages"][-1].content
+    system_prompt = (
+        "You are an Entity Extraction Agent. "
+        "Extract relevant details for a hotel search from the user query."
+    )
 
-    extracted: Entities = llm_with_tools.invoke(
+    extracted: Entities = llm.invoke(
         [SystemMessage(content=system_prompt), HumanMessage(content=user_query)]
     )
 
-    state["entities"] = extracted
+    state["entities"]  = extracted
     state["next_node"] = "hotel_search"
     return state
 
 
+# ── HOTEL SEARCH NODE (unchanged) ────────────────────────────────────────────
+
 @traceable(run_type="tool")
 def hotel_search_node(state: AgentState) -> AgentState:
-    """
-    Performs the SERP API Hotel Search using the extracted entities.
-    """
-    entities = state.get("entities", {})
-
-    # Construct a sensible query from entities
-    city = entities.get("city", "")
-    landmark = entities.get("landmark", "")
-    base_query = f"{landmark} {city}".strip()
-    if not base_query:
-        base_query = state["messages"][-1].content  # fallback
-
-    check_in = entities.get("check_in_date")
-    check_out = entities.get("check_out_date")
+    """Performs the SERP API Hotel Search using the extracted entities."""
+    entities   = state.get("entities", {})
+    city       = entities.get("city", "")
+    landmark   = entities.get("landmark", "")
+    base_query = f"{landmark} {city}".strip() or state["messages"][-1].content
+    check_in   = entities.get("check_in_date")
+    check_out  = entities.get("check_out_date")
 
     try:
         results = search_hotels(
@@ -102,71 +248,107 @@ def hotel_search_node(state: AgentState) -> AgentState:
     return state
 
 
+# ── WEB SEARCH NODE (unchanged) ──────────────────────────────────────────────
+
 @traceable(run_type="tool")
 def web_search_node(state: AgentState) -> AgentState:
-    """
-    Performs Tavily web search for general queries.
-    """
-    user_query = state["messages"][-1].content
-    results = web_search(query=user_query)
-
+    """Performs Tavily web search for general queries."""
+    user_query             = state["messages"][-1].content
+    results                = web_search(query=user_query)
     state["search_results"] = results
-    state["next_node"] = "summarize"
+    state["next_node"]     = "summarize"
     return state
 
+
+# ── SUMMARIZE NODE (updated) ──────────────────────────────────────────────────
 
 @traceable
 def summarize_node(state: AgentState) -> AgentState:
     """
-    Summarizes the raw search results for the user.
-    """
-    llm = get_llm()
-    user_query = state["messages"][-1].content
-    raw_results = state.get("search_results", "No results.")
+    Summarizes raw search results for the user.
 
-    system_prompt = (
+    Memory injection: user preferences (e.g. "prefers budget hotels",
+    "wants city center locations") are injected so the summary is
+    personalised without the user needing to repeat themselves.
+    """
+    llm         = get_llm()
+    user_query  = state["messages"][-1].content
+    raw_results = state.get("search_results", "No results.")
+    user_memory = state.get("user_memory", "")
+
+    # ── Inject memory into summarisation prompt ───────────────────────────────
+    base_prompt = (
         "You are a helpful Summarisation Agent. You will be given raw search results "
         "and the user's original query. Formulate a comprehensive, conversational, "
-        "and clear response answering the user's query based strictly on the provided search results."
+        "and clear response answering the user's query based strictly on the provided "
+        "search results."
     )
+    if user_memory:
+        system_prompt = (
+            f"{base_prompt}\n\n"
+            f"Apply these known user preferences when crafting your response:\n"
+            f"{user_memory}"
+        )
+    else:
+        system_prompt = base_prompt
 
-    content = f"User Query: {user_query}\n\nSearch Results:\n{raw_results}"
-
+    content  = f"User Query: {user_query}\n\nSearch Results:\n{raw_results}"
     response = llm.invoke(
         [SystemMessage(content=system_prompt), HumanMessage(content=content)]
     )
 
-    state["summary"] = response.content
+    state["summary"]   = response.content
     state["next_node"] = "critique"
-
     return state
 
 
+# ── CRITIQUE NODE (updated — autonomous signal) ───────────────────────────────
+
 class CritiqueDecision(BaseModel):
-    is_valid: bool = Field(description="True if the summary adequately addresses the user's query, False otherwise.")
-    critique: str = Field(description="A short explanation of the quality check.")
+    is_valid: bool = Field(
+        description="True if the summary adequately addresses the user's query."
+    )
+    critique: str = Field(
+        description="A short explanation of the quality check."
+    )
 
 
 @traceable
 def critique_node(state: AgentState) -> AgentState:
     """
     Critiques the summary against the user query to ensure quality.
+
+    AUTONOMOUS FEEDBACK SIGNAL:
+    When is_valid=False, this is a 100% confidence programmatic signal.
+    No human interpretation needed. memory_write_node will detect this
+    and update memory directly — no accumulation required.
+
+    This demonstrates the autonomous feedback loop:
+      critique fails → memory learns what went wrong → next search improves
     """
-    llm = get_llm().with_structured_output(CritiqueDecision)
+    llm        = get_llm().with_structured_output(CritiqueDecision)
     user_query = state["messages"][-1].content
-    summary = state.get("summary", "")
+    summary    = state.get("summary", "")
 
-    system_prompt = "You are a strict Critique Agent. Perform a quality check on whether the drafted summary answers the query."
-    content = f"User Query: {user_query}\n\nDrafted Summary:\n{summary}"
-
+    system_prompt = (
+        "You are a strict Critique Agent. "
+        "Perform a quality check on whether the drafted summary answers the query."
+    )
+    content  = f"User Query: {user_query}\n\nDrafted Summary:\n{summary}"
     response: CritiqueDecision = llm.invoke(
         [SystemMessage(content=system_prompt), HumanMessage(content=content)]
     )
 
-    state["is_valid"] = response.is_valid
-    state["critique"] = response.critique
+    state["is_valid"]  = response.is_valid
+    state["critique"]  = response.critique
+    state["next_node"] = "memory_write"     # always flows to memory_write next
 
-    # Normally if it fails we might loop back, but for this linear path we just end
-    state["next_node"] = "END"
+    # Log the autonomous signal clearly
+    if not response.is_valid:
+        print(f"\n[Critique] ❌ Quality check FAILED")
+        print(f"[Critique] This is an autonomous 100% confidence signal")
+        print(f"[Critique] Memory will be updated without human input")
+    else:
+        print(f"\n[Critique] ✅ Quality check PASSED")
 
     return state
