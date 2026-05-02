@@ -24,6 +24,7 @@ Decision thresholds:
 """
 
 import os
+import sys
 import json
 import sqlite3
 from datetime import datetime
@@ -363,6 +364,10 @@ class TravelMemoryManager:
 
 
 # ── Singleton ─────────────────────────────────────────────────────────────────
-# One manager instance shared across all nodes in the graph
-
-travel_memory = TravelMemoryManager()
+# One manager instance shared across all nodes in the graph.
+# Stored in sys.modules so Streamlit hot-reloads reuse the same QdrantClient
+# instead of creating a second one that conflicts on the file lock.
+_SINGLETON_KEY = "smart_travel_planner._travel_memory_instance"
+if _SINGLETON_KEY not in sys.modules:
+    sys.modules[_SINGLETON_KEY] = TravelMemoryManager()
+travel_memory = sys.modules[_SINGLETON_KEY]

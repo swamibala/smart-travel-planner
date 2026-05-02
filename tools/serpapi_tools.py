@@ -1,9 +1,37 @@
 import os
+import re
+import datetime
 from typing import Optional
 from dotenv import load_dotenv
 import serpapi
 
 load_dotenv()
+
+
+def _to_iso_date(raw: str) -> Optional[str]:
+    """
+    Convert any recognisable date string to YYYY-MM-DD.
+    Returns None if the string cannot be parsed.
+    """
+    raw = raw.strip()
+    # Already correct
+    if re.match(r"^\d{4}-\d{2}-\d{2}$", raw):
+        return raw
+    # Try common natural-language formats
+    for fmt in ("%d %B %Y", "%dth %B %Y", "%dst %B %Y", "%dnd %B %Y", "%drd %B %Y",
+                "%B %d %Y", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y"):
+        try:
+            return datetime.datetime.strptime(raw, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    # Strip ordinal suffixes and retry: "10th may 2026" → "10 may 2026"
+    cleaned = re.sub(r"(\d+)(st|nd|rd|th)", r"\1", raw, flags=re.IGNORECASE)
+    for fmt in ("%d %B %Y", "%d %b %Y"):
+        try:
+            return datetime.datetime.strptime(cleaned, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    return None
 
 
 def search_hotels(
@@ -24,16 +52,21 @@ def search_hotels(
     Returns:
         The search results.
     """
-    import datetime
-
     if not check_in_date or not check_in_date.strip():
-        # Google Hotels strictly requires a check_in_date. Default to tomorrow.
         check_in_date = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
-        
+    else:
+        check_in_date = _to_iso_date(check_in_date) or (
+            datetime.datetime.now() + datetime.timedelta(days=1)
+        ).strftime("%Y-%m-%d")
+
     if not check_out_date or not check_out_date.strip():
-        # Default to 1 day after check in
-        check_in_obj = datetime.datetime.strptime(check_in_date, "%Y-%m-%d")
-        check_out_date = (check_in_obj + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+        check_out_date = (
+            datetime.datetime.strptime(check_in_date, "%Y-%m-%d") + datetime.timedelta(days=1)
+        ).strftime("%Y-%m-%d")
+    else:
+        check_out_date = _to_iso_date(check_out_date) or (
+            datetime.datetime.strptime(check_in_date, "%Y-%m-%d") + datetime.timedelta(days=1)
+        ).strftime("%Y-%m-%d")
 
     params = {
         "engine": "google_hotels",

@@ -75,40 +75,81 @@ for i, msg in enumerate(st.session_state.messages):
 
         if msg["role"] == "assistant":
             trace = msg.get("trace", {})
+            route = trace.get("route") or "unknown"
 
-            with st.expander("🔍 Trace & Observability"):
+            ROUTE_LABELS = {
+                "direct":       "💬 Direct reply (greeting / chitchat)",
+                "hotel_search": "🏨 Hotel search (SerpAPI)",
+                "web_search":   "🌐 Web search (Tavily)",
+                "unknown":      "❓ Unknown",
+            }
+
+            with st.expander(f"🔍 Trace — Route: {ROUTE_LABELS[route]}"):
+                # ── 1. Flow ───────────────────────────────────────────────────
+                st.markdown("**1️⃣  Flow**")
+                if route == "direct":
+                    st.code("memory_read → orchestrator → memory_write", language="text")
+                    st.caption("Greeting/chitchat — search, summarize, and critique are skipped.")
+                elif route == "hotel_search":
+                    st.code(
+                        "memory_read → orchestrator → entity_extraction → "
+                        "hotel_search → summarize → critique → memory_write",
+                        language="text",
+                    )
+                else:
+                    st.code(
+                        "memory_read → orchestrator → web_search → "
+                        "summarize → critique → memory_write",
+                        language="text",
+                    )
+
+                st.divider()
+
+                # ── 2. Input / Output ─────────────────────────────────────────
                 left, right = st.columns(2)
-
                 with left:
-                    st.markdown("**🧠 Memory Retrieved**")
-                    if trace.get("user_memory"):
-                        st.info(trace["user_memory"])
-                    else:
-                        st.caption("No memories — fresh start")
-
-                    route = "hotel_search" if trace.get("entities") else "web_search"
-                    st.markdown(f"**🔀 Route:** `{route}`")
-
-                    entities = trace.get("entities")
-                    if entities and isinstance(entities, dict):
-                        st.markdown("**🏨 Extracted Entities**")
-                        st.json({k: v for k, v in entities.items() if v})
-
+                    st.markdown("**2️⃣  Input (user query)**")
+                    st.code(trace.get("query", ""), language="text")
                 with right:
-                    st.markdown("**🔎 Quality Check**")
-                    if trace.get("is_valid", True):
-                        st.success("✅ Passed")
-                    else:
-                        st.error("❌ Failed — autonomous signal sent to memory")
-                    if trace.get("critique"):
-                        st.caption(trace["critique"])
+                    st.markdown("**3️⃣  Output (assistant)**")
+                    st.code((trace.get("summary") or "")[:500], language="text")
 
-                    st.markdown("**💾 Memory Write**")
-                    if trace.get("memory_updated"):
-                        st.success("Preferences stored for next session")
-                    else:
-                        st.caption("Pending")
+                st.divider()
 
+                # ── 3. Memory read ────────────────────────────────────────────
+                st.markdown("**4️⃣  Memory Read** (injected into prompts)")
+                if trace.get("user_memory"):
+                    st.info(trace["user_memory"])
+                else:
+                    st.caption("No relevant memories — fresh start for this user.")
+
+                # ── 4. Entities (hotel path only) ─────────────────────────────
+                if route == "hotel_search":
+                    st.markdown("**5️⃣  Extracted Entities**")
+                    entities = trace.get("entities") or {}
+                    if isinstance(entities, dict) and any(entities.values()):
+                        st.json({k: v for k, v in entities.items() if v})
+                    else:
+                        st.caption("None extracted.")
+
+                # ── 5. Quality check (skipped on direct path) ────────────────
+                st.markdown("**6️⃣  Quality Check (critique)**")
+                if route == "direct":
+                    st.caption("Skipped — direct replies don't go through critique.")
+                elif trace.get("is_valid", True):
+                    st.success(f"✅ Passed — {trace.get('critique', '')}")
+                else:
+                    st.error(f"❌ Failed — autonomous signal sent to memory. {trace.get('critique', '')}")
+
+                # ── 6. Memory write ──────────────────────────────────────────
+                st.markdown("**7️⃣  Memory Write**")
+                if trace.get("memory_updated"):
+                    n = len(trace.get("memory_ids") or [])
+                    st.success(f"Stored {n} preference entry(s) for next session.")
+                else:
+                    st.caption("Nothing stored — no lasting preferences extracted from this turn.")
+
+                # ── 7. Raw search results (collapsed) ────────────────────────
                 if trace.get("search_results"):
                     with st.expander("📄 Raw Search Results"):
                         st.text(str(trace["search_results"])[:3000])
@@ -182,7 +223,9 @@ if prompt := st.chat_input("Ask about hotels or travel destinations..."):
             "user_memory":     None,
             "feedback_signal": None,
             "memory_updated":  False,
+            "memory_ids":      None,
             "next_node":       "",
+            "route":           None,
             "entities":        None,
             "search_results":  None,
             "summary":         None,
@@ -194,11 +237,15 @@ if prompt := st.chat_input("Ask about hotels or travel destinations..."):
         "role": "assistant",
         "content": result.get("summary", "No response generated."),
         "trace": {
+            "query":          prompt,
+            "summary":        result.get("summary"),
+            "route":          result.get("route"),
             "user_memory":    result.get("user_memory"),
             "entities":       result.get("entities"),
             "is_valid":       result.get("is_valid", True),
             "critique":       result.get("critique", ""),
             "memory_updated": result.get("memory_updated", False),
+            "memory_ids":     result.get("memory_ids"),
             "search_results": result.get("search_results"),
         },
         "feedback_done": False,

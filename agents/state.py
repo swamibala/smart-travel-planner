@@ -26,6 +26,7 @@ class AgentState(TypedDict):
     # ── Core (existing) ───────────────────────────────────────────────────────
     messages:       List[BaseMessage]
     next_node:      str
+    route:          Optional[str]   # "direct" | "hotel_search" | "web_search" — set once by orchestrator
     entities:       Optional[Entities]
     search_results: Optional[str]
     summary:        Optional[str]
@@ -37,3 +38,4 @@ class AgentState(TypedDict):
     user_memory:     Optional[str]  # retrieved memories, injected into prompts
     feedback_signal: Optional[str]  # "explicit_negative" | "implicit_negative" | None
     memory_updated:  bool           # True if memory was written this session
+    memory_ids:      Optional[List[str]]  # IDs written this session (for trace panel)

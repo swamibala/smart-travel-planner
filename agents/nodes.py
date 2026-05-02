@@ -96,62 +96,60 @@ def memory_write_node(state: AgentState) -> AgentState:
 
     Signal type: WRITE + autonomous feedback if critique failed
     """
-    user_id  = state.get("user_id", "default_user")
-    messages = state["messages"]
-    summary  = state.get("summary", "")
-    is_valid = state.get("is_valid", True)
+    user_id        = state.get("user_id", "default_user")
+    messages       = state["messages"]
+    is_valid       = state.get("is_valid", True)
+    search_results = state.get("search_results")  # None on direct/greeting path
 
-    # ── Extract user preference signals from the conversation ─────────────────
-    # Mem0's LLM extractor will separate lasting facts from task noise
-    conversation_content = "\n".join([
-        f"{m.type}: {m.content}" for m in messages
-    ])
+    memory_ids: list[str] = []
 
-    if conversation_content:
-        print(f"[Mem0] Writing user preferences from conversation...")
-        memory_ids = travel_memory.write(
-            user_id=user_id,
-            content=conversation_content,
-            agent_id="orchestrator",
-            topic="travel_preferences",
-        )
-        print(f"[Mem0] Stored {len(memory_ids)} memory entries")
+    # ── Only persist preferences from actual travel queries ───────────────────
+    # Greetings and chitchat have no search_results — skip extraction entirely
+    if search_results:
+        conversation_content = "\n".join([
+            f"{m.type}: {m.content}" for m in messages
+        ])
+        if conversation_content:
+            print(f"[Mem0] Writing user preferences from conversation...")
+            memory_ids = travel_memory.write(
+                user_id=user_id,
+                content=conversation_content,
+                agent_id="orchestrator",
+                topic="travel_preferences",
+            )
+            print(f"[Mem0] Stored {len(memory_ids)} memory entries")
 
-    # ── Autonomous feedback signal from critique node ─────────────────────────
-    # This is the KEY autonomous signal — no human involved
-    # critique_node set is_valid=False → the system knows the summary failed
-    # Confidence: 100% (programmatic signal, not ambiguous language)
-    if not is_valid:
-        critique_text = state.get("critique", "Summary quality check failed")
-        print(f"\n[Mem0] 🤖 Autonomous signal detected: critique failed")
-        print(f"[Mem0] Signal confidence: 100% (programmatic — no ambiguity)")
-        print(f"[Mem0] Critique: {critique_text}")
+        # ── Autonomous feedback signal from critique node ─────────────────────
+        if not is_valid:
+            critique_text = state.get("critique", "Summary quality check failed")
+            print(f"\n[Mem0] 🤖 Autonomous signal detected: critique failed")
+            print(f"[Mem0] Signal confidence: 100% (programmatic — no ambiguity)")
+            print(f"[Mem0] Critique: {critique_text}")
 
-        travel_memory.process_feedback(
-            user_id=user_id,
-            signal_type="autonomous_failure",
-            topic=f"search_quality: {state['messages'][-1].content[:50]}",
-        )
+            travel_memory.process_feedback(
+                user_id=user_id,
+                signal_type="autonomous_failure",
+                topic=f"search_quality: {state['messages'][-1].content[:50]}",
+            )
 
-        # Also write the failure pattern as a memory so future searches learn
-        failure_insight = (
-            f"Previous search failed quality check. "
-            f"Critique feedback: {critique_text}. "
-            f"Query was: {state['messages'][-1].content}"
-        )
-        travel_memory.write(
-            user_id=user_id,
-            content=failure_insight,
-            agent_id="critique_agent",
-            topic="search_quality_failure",
-        )
+            failure_insight = (
+                f"Previous search failed quality check. "
+                f"Critique feedback: {critique_text}. "
+                f"Query was: {state['messages'][-1].content}"
+            )
+            travel_memory.write(
+                user_id=user_id,
+                content=failure_insight,
+                agent_id="critique_agent",
+                topic="search_quality_failure",
+            )
 
     # ── Apply time-based decay to all memories ────────────────────────────────
-    # Stale preferences fade naturally — 1% per session
     travel_memory.apply_decay(user_id=user_id, decay_rate=0.01)
     print(f"[Mem0] Applied session decay (rate: 1%)")
 
-    state["memory_updated"] = True
+    state["memory_updated"] = len(memory_ids) > 0
+    state["memory_ids"]     = memory_ids
     return state
 
 
@@ -204,10 +202,16 @@ def orchestrator_node(state: AgentState) -> AgentState:
     if response.route == "direct":
         state["summary"]   = response.direct_response or "Hi! I'm your Smart Travel Planner. Ask me about hotels or destinations!"
         state["is_valid"]  = True
+        state["route"]     = "direct"
         state["next_node"] = "memory_write"   # skip search, summarize, and critique
+    elif response.route == "entity_extraction":
+        state["route"]     = "hotel_search"
+        state["next_node"] = "entity_extraction"
     else:
-        state["next_node"] = response.route
+        state["route"]     = "web_search"
+        state["next_node"] = "web_search"
 
+    print(f"[Orchestrator] Route → {state['route']}")
     return state
 
 
@@ -220,7 +224,9 @@ def entity_extraction_node(state: AgentState) -> AgentState:
     user_query    = state["messages"][-1].content
     system_prompt = (
         "You are an Entity Extraction Agent. "
-        "Extract relevant details for a hotel search from the user query."
+        "Extract relevant details for a hotel search from the user query. "
+        "Return check_in_date and check_out_date ONLY in YYYY-MM-DD format "
+        "(e.g. 2026-05-10). Never return natural-language dates."
     )
 
     extracted: Entities = llm.invoke(
