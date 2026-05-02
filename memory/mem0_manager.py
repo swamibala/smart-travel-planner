@@ -44,7 +44,7 @@ def _build_mem0_config() -> dict:
             },
         },
         "embedder": {
-            "provider": "google",
+            "provider": "gemini",
             "config": {
                 "model": "models/text-embedding-004",
                 "api_key": os.environ.get("GOOGLE_API_KEY"),

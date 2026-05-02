@@ -17,7 +17,6 @@ Signal flow:
 
 import os
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langsmith import traceable
 from langchain_core.messages import SystemMessage, HumanMessage
 from pydantic import BaseModel, Field
 from typing import Literal
@@ -43,7 +42,6 @@ def get_llm():
 
 # ── MEMORY READ NODE ──────────────────────────────────────────────────────────
 
-@traceable
 def memory_read_node(state: AgentState) -> AgentState:
     """
     Reads relevant memories from Mem0 BEFORE any agent runs.
@@ -83,7 +81,6 @@ def memory_read_node(state: AgentState) -> AgentState:
 
 # ── MEMORY WRITE NODE ─────────────────────────────────────────────────────────
 
-@traceable
 def memory_write_node(state: AgentState) -> AgentState:
     """
     Extracts lasting insights from this session and writes them to Mem0.
@@ -170,7 +167,6 @@ class RouteDecision(BaseModel):
     )
 
 
-@traceable
 def orchestrator_node(state: AgentState) -> AgentState:
     """
     Decides whether the user is asking for hotels or general info.
@@ -204,7 +200,6 @@ def orchestrator_node(state: AgentState) -> AgentState:
 
 # ── ENTITY EXTRACTION NODE (unchanged) ───────────────────────────────────────
 
-@traceable
 def entity_extraction_node(state: AgentState) -> AgentState:
     """Extracts entities for the hotel search."""
     llm = get_llm().with_structured_output(Entities)
@@ -226,7 +221,6 @@ def entity_extraction_node(state: AgentState) -> AgentState:
 
 # ── HOTEL SEARCH NODE (unchanged) ────────────────────────────────────────────
 
-@traceable(run_type="tool")
 def hotel_search_node(state: AgentState) -> AgentState:
     """Performs the SERP API Hotel Search using the extracted entities."""
     entities   = state.get("entities", {})
@@ -250,7 +244,6 @@ def hotel_search_node(state: AgentState) -> AgentState:
 
 # ── WEB SEARCH NODE (unchanged) ──────────────────────────────────────────────
 
-@traceable(run_type="tool")
 def web_search_node(state: AgentState) -> AgentState:
     """Performs Tavily web search for general queries."""
     user_query             = state["messages"][-1].content
@@ -262,7 +255,6 @@ def web_search_node(state: AgentState) -> AgentState:
 
 # ── SUMMARIZE NODE (updated) ──────────────────────────────────────────────────
 
-@traceable
 def summarize_node(state: AgentState) -> AgentState:
     """
     Summarizes raw search results for the user.
@@ -313,7 +305,6 @@ class CritiqueDecision(BaseModel):
     )
 
 
-@traceable
 def critique_node(state: AgentState) -> AgentState:
     """
     Critiques the summary against the user query to ensure quality.

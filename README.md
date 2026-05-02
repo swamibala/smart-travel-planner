@@ -61,17 +61,20 @@ graph TD
 
 ```
 ├── agents/
-│   ├── graph.py       # The compiled LangGraph definitions
-│   ├── nodes.py       # Core node functions utilizing LLMs and Pydantic schemas
-│   └── state.py       # TypedDict schemas for internal routing payloads
+│   ├── graph.py         # The compiled LangGraph definitions
+│   ├── nodes.py         # Core node functions utilizing LLMs and Pydantic schemas
+│   └── state.py         # TypedDict schemas for internal routing payloads
 ├── memory/
 │   └── mem0_manager.py  # TravelMemoryManager — Mem0 + Qdrant + SQLite signal scores
 ├── tools/
 │   ├── serpapi_tools.py # Wrapper for Google Hotels Search 
 │   └── tavily_tools.py  # Wrapper for Tavily's Web Search
-├── main.py            # CLI interactive Chat interface
-├── pyproject.toml     # `uv` managed dependency file
-└── README.md          # Documentation
+├── app.py               # Streamlit UI — chat + observability + feedback
+├── main.py              # CLI interface (backend)
+├── start_ui.sh          # Startup script for Streamlit UI
+├── start_backend.sh     # Startup script for CLI backend
+├── pyproject.toml       # `uv` managed dependency file
+└── README.md            # Documentation
 ```
 
 ---
@@ -127,11 +130,6 @@ TAVILY_API_KEY="your_tavily_key"
 
 # Google Hotel / Utilities
 SERPAPI_API_KEY="your_serpapi_key_here"
-
-# Optional: LangSmith Tracing
-LANGCHAIN_TRACING_V2=true
-LANGCHAIN_API_KEY="your_langsmith_key"
-LANGCHAIN_PROJECT="SmartTravelPlanner"
 ```
 
 ### 2. Install Dependencies
@@ -144,16 +142,29 @@ uv sync
 This installs all dependencies including `mem0ai` and `qdrant-client` for the local memory layer.
 
 ### 3. Run the application
-Run the interactive CLI agent:
 
+**Streamlit UI** (recommended — includes observability and feedback):
 ```bash
-uv run python main.py
+bash start_ui.sh
+```
+Opens at `http://localhost:8501`.
+
+**CLI backend** (terminal-only):
+```bash
+bash start_backend.sh
 ```
 
-### 4. Exploring LangSmith Traces
-This project now strictly enforces telemetry across all agent nodes via LangSmith's `@traceable` decorators.
+### 4. Streamlit UI & Observability
 
-By providing the `LANGCHAIN_API_KEY` in the `.env` file, execution payloads will automatically flow into your LangSmith dashboard under the "SmartTravelPlanner" project. 
+The Streamlit UI replaces LangSmith for local testing and observability. Every agent response includes an expandable **Trace & Observability** panel showing:
 
-- Tracing helps debug LLM errors, measure node execution latency, and verify structured Pydantic input schemas in UI.
-- Ensure your `LANGCHAIN_TRACING_V2=true` value is active to retain logs!
+| Panel | What it shows |
+|---|---|
+| 🧠 Memory Retrieved | Preferences injected from past sessions |
+| 🔀 Route | Whether `hotel_search` or `web_search` was taken |
+| 🏨 Extracted Entities | City, landmark, check-in/out dates (hotel queries) |
+| 🔎 Quality Check | Critique result and whether the autonomous signal fired |
+| 💾 Memory Write | Whether preferences were stored this session |
+| 📄 Raw Search Results | Full API output (collapsed) |
+
+**Feedback** is collected inline via 👍 / 👎 buttons or a free-text input below each response.
