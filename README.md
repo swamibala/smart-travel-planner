@@ -72,7 +72,6 @@ graph TD
 ├── app.py               # Streamlit UI — chat + observability + feedback
 ├── main.py              # CLI interface (backend)
 ├── start_ui.sh          # Startup script for Streamlit UI
-├── start_backend.sh     # Startup script for CLI backend
 ├── pyproject.toml       # `uv` managed dependency file
 └── README.md            # Documentation
 ```
@@ -143,16 +142,10 @@ This installs all dependencies including `mem0ai` and `qdrant-client` for the lo
 
 ### 3. Run the application
 
-**Streamlit UI** (recommended — includes observability and feedback):
 ```bash
 bash start_ui.sh
 ```
 Opens at `http://localhost:8501`.
-
-**CLI backend** (terminal-only):
-```bash
-bash start_backend.sh
-```
 
 ### 4. Streamlit UI & Observability
 

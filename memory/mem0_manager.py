@@ -46,7 +46,7 @@ def _build_mem0_config() -> dict:
         "embedder": {
             "provider": "gemini",
             "config": {
-                "model": "models/text-embedding-004",
+                "model": "models/gemini-embedding-001",
                 "api_key": os.environ.get("GOOGLE_API_KEY"),
             },
         },
@@ -132,7 +132,7 @@ class TravelMemoryManager:
 
     # ── READ ──────────────────────────────────────────────────────────────────
 
-    def read(self, user_id: str, query: str, agent_id: str = "orchestrator") -> str:
+    def read(self, user_id: str, query: str) -> str:
         """
         Retrieve relevant memories before an agent runs.
         Called at the START of every graph execution.
@@ -142,9 +142,8 @@ class TravelMemoryManager:
         try:
             results = self.mem0.search(
                 query=query,
-                user_id=user_id,
-                agent_id=agent_id,
-                limit=5,
+                filters={"user_id": user_id},
+                top_k=5,
             )
 
             if not results or not results.get("results"):
@@ -235,7 +234,7 @@ class TravelMemoryManager:
             record = _get_score(memory_id)
         else:
             # Search for most relevant memory to update
-            results = self.mem0.search(query=topic, user_id=user_id, limit=1)
+            results = self.mem0.search(query=topic, filters={"user_id": user_id}, top_k=1)
             if results and results.get("results"):
                 memory_id = results["results"][0].get("id")
                 record = _get_score(memory_id) if memory_id else None

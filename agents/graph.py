@@ -31,7 +31,7 @@ from agents.nodes import (
 
 
 def route_from_orchestrator(state: AgentState):
-    """Routes to entity_extraction (hotel) or web_search (general)."""
+    """Routes to entity_extraction, web_search, or critique (direct/chitchat)."""
     return state.get("next_node", "web_search")
 
 
@@ -39,7 +39,7 @@ def build_graph():
     workflow = StateGraph(AgentState)
 
     # ── Nodes ─────────────────────────────────────────────────────────────────
-    workflow.add_node("memory_read",       memory_read_node)       # NEW
+    workflow.add_node("memory_read",       memory_read_node)
     workflow.add_node("orchestrator",      orchestrator_node)
     workflow.add_node("entity_extraction", entity_extraction_node)
     workflow.add_node("hotel_search",      hotel_search_node)
@@ -61,6 +61,7 @@ def build_graph():
         {
             "entity_extraction": "entity_extraction",
             "web_search":        "web_search",
+            "critique":          "critique",   # direct path when orchestrator handles it inline
         },
     )
 

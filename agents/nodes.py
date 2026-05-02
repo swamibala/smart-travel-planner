@@ -66,7 +66,6 @@ def memory_read_node(state: AgentState) -> AgentState:
     memory_context = travel_memory.read(
         user_id=user_id,
         query=user_query,
-        agent_id="orchestrator",
     )
 
     if memory_context:
@@ -158,43 +157,56 @@ def memory_write_node(state: AgentState) -> AgentState:
 
 # ── ORCHESTRATOR NODE (updated) ───────────────────────────────────────────────
 
-class RouteDecision(BaseModel):
-    route: Literal["entity_extraction", "web_search"] = Field(
+from typing import Optional as _Optional
+
+
+class OrchestratorDecision(BaseModel):
+    route: Literal["entity_extraction", "web_search", "direct"] = Field(
         description=(
-            "Route to 'entity_extraction' if the user is asking about hotels, "
-            "accommodation, or places to stay. Route to 'web_search' for general questions."
+            "Route to 'entity_extraction' for hotel or accommodation queries. "
+            "Route to 'web_search' for general travel or destination questions. "
+            "Route to 'direct' for greetings, small talk, or anything unrelated to travel — "
+            "and provide a short friendly response in direct_response."
         )
+    )
+    direct_response: _Optional[str] = Field(
+        default=None,
+        description="Required when route is 'direct'. A warm, brief reply to the user.",
     )
 
 
 def orchestrator_node(state: AgentState) -> AgentState:
     """
-    Decides whether the user is asking for hotels or general info.
-    
-    Memory injection: user_memory is prepended to the system prompt
-    so the orchestrator is aware of past preferences when routing.
-    E.g. "user always books budget hotels" affects routing confidence.
+    Routes the query and handles chitchat inline — no extra node needed.
+
+    - entity_extraction  → hotel/accommodation query
+    - web_search         → general travel question
+    - direct             → greeting or off-topic; response written straight to summary,
+                           graph skips search+summarize and goes to critique
     """
-    llm = get_llm().with_structured_output(RouteDecision)
+    llm = get_llm().with_structured_output(OrchestratorDecision)
 
-    user_query   = state["messages"][-1].content
-    user_memory  = state.get("user_memory", "")
+    user_query  = state["messages"][-1].content
+    user_memory = state.get("user_memory", "")
 
-    # ── Inject memory into system prompt ──────────────────────────────────────
     base_prompt = (
-        "You are the Orchestrator Planner Agent. "
-        "Your goal is to route the user's query accurately."
+        "You are the Orchestrator Planner Agent for a Smart Travel Planner. "
+        "Route the user's query accurately. "
+        "For greetings or off-topic input, respond directly with a warm message "
+        "and set route to 'direct'."
     )
-    if user_memory:
-        system_prompt = f"{base_prompt}\n\n{user_memory}"
-    else:
-        system_prompt = base_prompt
+    system_prompt = f"{base_prompt}\n\n{user_memory}" if user_memory else base_prompt
 
-    response: RouteDecision = llm.invoke(
+    response: OrchestratorDecision = llm.invoke(
         [SystemMessage(content=system_prompt), HumanMessage(content=user_query)]
     )
 
-    state["next_node"] = response.route
+    if response.route == "direct":
+        state["summary"]   = response.direct_response or "Hi! I'm your Smart Travel Planner. Ask me about hotels or destinations!"
+        state["next_node"] = "critique"
+    else:
+        state["next_node"] = response.route
+
     return state
 
 
